@@ -164,8 +164,13 @@ function processAudio(
     .audioCodec(codec)
     .audioBitrate(bitrate)
     .output(outputPath)
+    .on('start', (cmdLine: string) => console.log('[ffmpeg] cmd:', cmdLine))
+    .on('stderr', (line: string) => console.error('[ffmpeg] stderr:', line))
     .on('end', onEnd)
-    .on('error', onError)
+    .on('error', (err: Error) => {
+      console.error('[ffmpeg] error:', err.message);
+      onError(err);
+    })
     .run();
 }
 
@@ -291,8 +296,7 @@ app.get('/api/preview-audio/:id', (req, res) => {
     return;
   }
 
-  res.setHeader('Content-Type', 'audio/mpeg');
-  fs.createReadStream(filePath).pipe(res);
+  res.sendFile(filePath);
 });
 
 // GET /api/download-ringtone/:id — download the processed .m4a

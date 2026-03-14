@@ -507,6 +507,12 @@ export function init() {
     previewPauseIcon.classList.add('hidden');
   });
 
+  previewAudio.addEventListener('error', () => {
+    if (!previewPlayer.classList.contains('hidden')) {
+      showStatus('Preview playback failed', true);
+    }
+  });
+
   previewLoopBtn.addEventListener('click', () => {
     setPreviewLoopActive(!isPreviewLooping);
   });

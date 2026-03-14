@@ -376,6 +376,37 @@ describe('DOM integration', () => {
     });
   });
 
+  // -- Bug: preview audio element shows error when audio fails to load --
+  describe('Preview audio load failure shows status message', () => {
+    beforeEach(async () => {
+      await loadWaveform();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('shows error status when the preview audio element fires an error event', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+
+      document.getElementById('generate-preview-btn')!.click();
+      await new Promise((r) => setTimeout(r, 0));
+
+      // Simulate the audio element failing to load (e.g. server returned 404)
+      const previewAudio = document.getElementById('preview-audio') as HTMLAudioElement;
+      previewAudio.dispatchEvent(new Event('error'));
+
+      const statusEl = document.getElementById('status')!;
+      expect(statusEl.classList.contains('hidden')).toBe(false);
+      expect(statusEl.textContent).toContain('failed');
+    });
+  });
+
   // -- Bug 4: generatePreview handles non-JSON server error gracefully --
   describe('Bug 4: generatePreview handles non-JSON response', () => {
     beforeEach(async () => {

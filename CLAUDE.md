@@ -52,4 +52,6 @@ All temp files live in `tmp/` (gitignored). UUIDs are validated via regex before
 # Development Process
 A typical flow is to examine TODO.md and select one or more bug fixes or feature requests. 
 
+After fixing the bug and verifying it, mark it as complete in TODO.md
+
 For bugs, if feasible and reasonable, try to first write a test that catches the error. Make sure the test is failing before implementing the fix.
