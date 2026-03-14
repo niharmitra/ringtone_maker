@@ -48,3 +48,8 @@ All temp files live in `tmp/` (gitignored). UUIDs are validated via regex before
 - `yt-dlp` must be installed on the system (not an npm package) for YouTube downloads
 - `ffmpeg` must be installed on the system for audio processing
 - Tailwind CSS is loaded via CDN in `public/index.html`
+
+# Development Process
+A typical flow is to examine TODO.md and select one or more bug fixes or feature requests. 
+
+For bugs, if feasible and reasonable, try to first write a test that catches the error. Make sure the test is failing before implementing the fix.

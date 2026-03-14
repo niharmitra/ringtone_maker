@@ -147,12 +147,17 @@ function processAudio(
   bitrate: string,
   onEnd: () => void,
   onError: (err: Error) => void,
+  outputFormat?: string,
 ) {
   let cmd = ffmpeg(inputPath).setStartTime(startTime).setDuration(duration);
 
   if (fadeOutDuration > 0 && fadeOutDuration < duration) {
     const fadeStart = duration - fadeOutDuration;
     cmd = cmd.audioFilters([`afade=t=out:st=${fadeStart}:d=${fadeOutDuration}`]);
+  }
+
+  if (outputFormat) {
+    cmd = cmd.format(outputFormat);
   }
 
   cmd
@@ -213,19 +218,23 @@ app.post('/api/process', (req, res) => {
   }
 
   const outputId = uuidv4();
-  const outputPath = path.join(TMP_DIR, `${outputId}.m4r`);
+  const outputPath = path.join(TMP_DIR, `${outputId}.m4a`);
 
-  processAudio(
-    inputPath,
-    startTime,
-    duration,
-    fadeOutDuration,
-    outputPath,
-    'aac',
-    '256k',
-    () => res.json({ id: outputId }),
-    (err) => res.status(500).json({ error: 'Processing failed', detail: err.message }),
-  );
+  try {
+    processAudio(
+      inputPath,
+      startTime,
+      duration,
+      fadeOutDuration,
+      outputPath,
+      'aac',
+      '256k',
+      () => res.json({ id: outputId }),
+      (err) => res.status(500).json({ error: 'Processing failed', detail: err.message }),
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Processing failed', detail: String(err) });
+  }
 });
 
 // POST /api/preview — trim + fade + encode to .mp3 for inline browser playback
@@ -248,17 +257,21 @@ app.post('/api/preview', (req, res) => {
   const outputId = uuidv4();
   const outputPath = path.join(TMP_DIR, `${outputId}.mp3`);
 
-  processAudio(
-    inputPath,
-    startTime,
-    duration,
-    fadeOutDuration,
-    outputPath,
-    'libmp3lame',
-    '192k',
-    () => res.json({ id: outputId }),
-    (err) => res.status(500).json({ error: 'Preview generation failed', detail: err.message }),
-  );
+  try {
+    processAudio(
+      inputPath,
+      startTime,
+      duration,
+      fadeOutDuration,
+      outputPath,
+      'libmp3lame',
+      '192k',
+      () => res.json({ id: outputId }),
+      (err) => res.status(500).json({ error: 'Preview generation failed', detail: err.message }),
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Preview generation failed', detail: String(err) });
+  }
 });
 
 // GET /api/preview-audio/:id — stream the preview .mp3 for inline playback
@@ -281,7 +294,7 @@ app.get('/api/preview-audio/:id', (req, res) => {
   fs.createReadStream(filePath).pipe(res);
 });
 
-// GET /api/download-ringtone/:id — download the processed .m4r
+// GET /api/download-ringtone/:id — download the processed .m4a
 app.get('/api/download-ringtone/:id', (req, res) => {
   const { id } = req.params;
 
@@ -290,7 +303,7 @@ app.get('/api/download-ringtone/:id', (req, res) => {
     return;
   }
 
-  const filePath = path.join(TMP_DIR, `${id}.m4r`);
+  const filePath = path.join(TMP_DIR, `${id}.m4a`);
 
   if (!fs.existsSync(filePath)) {
     res.status(404).json({ error: 'Ringtone not found' });
@@ -298,7 +311,7 @@ app.get('/api/download-ringtone/:id', (req, res) => {
   }
 
   res.setHeader('Content-Type', 'audio/mp4');
-  res.setHeader('Content-Disposition', `attachment; filename="ringtone.m4r"`);
+  res.setHeader('Content-Disposition', `attachment; filename="ringtone.m4a"`);
   fs.createReadStream(filePath).pipe(res);
 });
 

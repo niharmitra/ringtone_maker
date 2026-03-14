@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -32,6 +32,7 @@ const mockWaveSurfer = {
   zoom: vi.fn(),
   destroy: vi.fn(),
   getDuration: vi.fn(() => 60),
+  setTime: vi.fn(),
 };
 
 vi.mock('wavesurfer.js', () => ({
@@ -237,6 +238,169 @@ describe('DOM integration', () => {
       slider.dispatchEvent(new Event('input'));
       // clientWidth is 0 in jsdom → baseMinPxPerSec stays 0 → guard fires
       expect(mockWaveSurfer.zoom).not.toHaveBeenCalled();
+    });
+  });
+
+  // -- Bug 2: autoScroll passed to WaveSurfer.create (autoCenter removed to prevent scroll-fighting) --
+  describe('Bug 2: WaveSurfer created with autoScroll', () => {
+    it('passes autoScroll: true to WaveSurfer.create', async () => {
+      const { default: WaveSurfer } = await import('wavesurfer.js');
+      const createSpy = vi.mocked(WaveSurfer.create);
+      await loadWaveform();
+      const callArgs = createSpy.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      expect(callArgs.autoScroll).toBe(true);
+      expect(callArgs.autoCenter).toBeUndefined();
+    });
+  });
+
+  // -- Bug 1: resume from current position after region end --
+  describe('Bug 1: play resumes from current position after hitting region end', () => {
+    beforeEach(async () => {
+      mockWaveSurfer.play.mockClear();
+      mockWaveSurfer.isPlaying.mockReturnValue(false);
+      await loadWaveform();
+    });
+
+    it('plays from region start on first press', () => {
+      document.getElementById('play-btn')!.click();
+      expect(mockWaveSurfer.play).toHaveBeenCalledWith(mockRegion.start, mockRegion.end);
+    });
+
+    it('resumes from current time (clamped) after pausing at region end', () => {
+      // Simulate playback reaching the region end
+      mockWaveSurfer.getCurrentTime.mockReturnValue(mockRegion.end);
+      wavesurferHandlers['pause']?.();
+      mockWaveSurfer.play.mockClear();
+
+      // User drags the right handle to extend region (region end is still mockRegion.end here)
+      // Now pressing play should resume from current time, not region start
+      mockWaveSurfer.getCurrentTime.mockReturnValue(mockRegion.end - 0.1);
+      document.getElementById('play-btn')!.click();
+      // Should play from current time, not region.start
+      expect(mockWaveSurfer.play).not.toHaveBeenCalledWith(mockRegion.start, mockRegion.end);
+      const [startArg] = mockWaveSurfer.play.mock.calls[0];
+      expect(startArg).toBeCloseTo(mockRegion.end - 0.1);
+    });
+
+    it('second play press after resume starts from region.start again', () => {
+      // Hit region end → pausedAtRegionEnd = true
+      mockWaveSurfer.getCurrentTime.mockReturnValue(mockRegion.end);
+      wavesurferHandlers['pause']?.();
+      mockWaveSurfer.play.mockClear();
+
+      // First play → resumes, clears flag
+      mockWaveSurfer.getCurrentTime.mockReturnValue(mockRegion.end - 0.1);
+      document.getElementById('play-btn')!.click();
+      mockWaveSurfer.play.mockClear();
+
+      // Pause mid-region (not at end)
+      mockWaveSurfer.getCurrentTime.mockReturnValue(10);
+      wavesurferHandlers['pause']?.();
+      mockWaveSurfer.play.mockClear();
+
+      // Next play → back to normal behavior (from region start)
+      document.getElementById('play-btn')!.click();
+      expect(mockWaveSurfer.play).toHaveBeenCalledWith(mockRegion.start, mockRegion.end);
+    });
+  });
+
+  // -- Bug 3: click-to-seek sets play position --
+  describe('Bug 3: interaction event enables resume from clicked position', () => {
+    beforeEach(async () => {
+      mockWaveSurfer.play.mockClear();
+      mockWaveSurfer.setTime.mockClear();
+      mockWaveSurfer.isPlaying.mockReturnValue(false);
+      await loadWaveform();
+    });
+
+    it('plays from current time after user seeks via interaction', () => {
+      // User clicks the waveform to seek to 15s
+      mockWaveSurfer.getCurrentTime.mockReturnValue(15);
+      wavesurferHandlers['interaction']?.();
+
+      document.getElementById('play-btn')!.click();
+      const [startArg] = mockWaveSurfer.play.mock.calls[0];
+      expect(startArg).toBeCloseTo(15);
+    });
+
+    it('clamps seek position to region bounds', () => {
+      // User seeks before region start
+      mockWaveSurfer.getCurrentTime.mockReturnValue(mockRegion.start - 5);
+      wavesurferHandlers['interaction']?.();
+
+      document.getElementById('play-btn')!.click();
+      const [startArg] = mockWaveSurfer.play.mock.calls[0];
+      expect(startArg).toBe(mockRegion.start);
+    });
+
+    it('userSeeked flag is cleared after play starts', () => {
+      mockWaveSurfer.getCurrentTime.mockReturnValue(15);
+      wavesurferHandlers['interaction']?.();
+
+      // First play — consumes the flag
+      document.getElementById('play-btn')!.click();
+      mockWaveSurfer.play.mockClear();
+
+      // Pause mid-region (not at end), no new seek
+      mockWaveSurfer.getCurrentTime.mockReturnValue(10);
+      wavesurferHandlers['pause']?.();
+      mockWaveSurfer.play.mockClear();
+
+      // Second play — flag is gone, should play from region start
+      document.getElementById('play-btn')!.click();
+      expect(mockWaveSurfer.play).toHaveBeenCalledWith(mockRegion.start, mockRegion.end);
+    });
+
+    it('region-clicked sets userSeeked and calls setTime with computed position', () => {
+      // Mock waveform container geometry
+      const container = document.querySelector('#waveform') as HTMLElement;
+      vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+        left: 0, top: 0, right: 800, bottom: 96,
+        width: 800, height: 96, x: 0, y: 0, toJSON: () => {},
+      });
+      Object.defineProperty(container, 'scrollLeft', { value: 0, configurable: true });
+      Object.defineProperty(container, 'scrollWidth', { value: 800, configurable: true });
+
+      // Click at x=400 on an 800px wide container → 50% → 30s (duration=60)
+      const mockEvent = { stopPropagation: vi.fn(), clientX: 400 } as unknown as MouseEvent;
+      regionHandlers['region-clicked']?.(mockRegion, mockEvent);
+
+      expect(mockEvent.stopPropagation).toHaveBeenCalled();
+      expect(mockWaveSurfer.setTime).toHaveBeenCalledWith(30);
+
+      // Play should resume from the seeked position
+      mockWaveSurfer.getCurrentTime.mockReturnValue(30);
+      document.getElementById('play-btn')!.click();
+      const [startArg] = mockWaveSurfer.play.mock.calls[0];
+      expect(startArg).toBeCloseTo(30);
+    });
+  });
+
+  // -- Bug 4: generatePreview handles non-JSON server error gracefully --
+  describe('Bug 4: generatePreview handles non-JSON response', () => {
+    beforeEach(async () => {
+      await loadWaveform();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('shows error status when server returns non-JSON (e.g. HTML error page)', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response('<html>Internal Server Error</html>', {
+          status: 500,
+          headers: { 'Content-Type': 'text/html' },
+        }),
+      );
+
+      document.getElementById('generate-preview-btn')!.click();
+      // Wait for async generatePreview to complete
+      await new Promise((r) => setTimeout(r, 0));
+
+      const statusEl = document.getElementById('status')!;
+      expect(statusEl.classList.contains('hidden')).toBe(false);
+      expect(statusEl.textContent).toContain('failed');
     });
   });
 });

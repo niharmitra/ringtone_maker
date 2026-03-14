@@ -26,6 +26,8 @@ let currentAudioId: string | null = null;
 let isLooping = false;
 let isPreviewLooping = false;
 let baseMinPxPerSec = 0;
+let pausedAtRegionEnd = false;
+let userSeeked = false;
 
 function formatTime(seconds: number): string {
   return seconds.toFixed(2) + 's';
@@ -162,6 +164,8 @@ export function init() {
     resetPreview();
     zoomSlider.value = '0';
     baseMinPxPerSec = 0;
+    pausedAtRegionEnd = false;
+    userSeeked = false;
 
     regions = RegionsPlugin.create();
 
@@ -172,6 +176,7 @@ export function init() {
       cursorColor: '#06b6d4',
       height: 96,
       plugins: [regions],
+      autoScroll: true,
     });
 
     wavesurfer.on('play', showPlayState);
@@ -179,17 +184,25 @@ export function init() {
     // pause fires both on user pause AND when play(start,end) reaches the end.
     // Detect region-end by checking currentTime ≈ region.end → loop if enabled.
     wavesurfer.on('pause', () => {
-      if (isLooping && activeRegion && wavesurfer) {
+      if (activeRegion && wavesurfer) {
         const ct = wavesurfer.getCurrentTime();
         if (isAtRegionEnd(ct, activeRegion.end)) {
-          wavesurfer.play(activeRegion.start, activeRegion.end);
-          return;
+          if (isLooping) {
+            wavesurfer.play(activeRegion.start, activeRegion.end);
+            return;
+          }
+          pausedAtRegionEnd = true;
         }
       }
       showPausedState();
     });
 
     wavesurfer.on('finish', showPausedState);
+
+    wavesurfer.on('interaction', () => {
+      userSeeked = true;
+      pausedAtRegionEnd = false;
+    });
 
     wavesurfer.on('ready', () => {
       const totalDuration = wavesurfer!.getDuration();
@@ -234,6 +247,16 @@ export function init() {
     regions.on('region-clicked', (region, e) => {
       e.stopPropagation();
       activeRegion = region as typeof activeRegion;
+      if (wavesurfer) {
+        const container = document.querySelector('#waveform') as HTMLElement;
+        const rect = container.getBoundingClientRect();
+        const relativeX = e.clientX - rect.left + container.scrollLeft;
+        const duration = wavesurfer.getDuration();
+        const time = (relativeX / container.scrollWidth) * duration;
+        wavesurfer.setTime(Math.max(0, Math.min(time, duration)));
+        userSeeked = true;
+        pausedAtRegionEnd = false;
+      }
     });
 
     wavesurfer.load(`/api/audio/${id}`);
@@ -305,7 +328,15 @@ export function init() {
     if (wavesurfer.isPlaying()) {
       wavesurfer.pause();
     } else {
-      wavesurfer.play(activeRegion.start, activeRegion.end);
+      if (userSeeked || pausedAtRegionEnd) {
+        const ct = wavesurfer.getCurrentTime();
+        const clampedStart = Math.max(activeRegion.start, Math.min(ct, activeRegion.end));
+        pausedAtRegionEnd = false;
+        userSeeked = false;
+        wavesurfer.play(clampedStart, activeRegion.end);
+      } else {
+        wavesurfer.play(activeRegion.start, activeRegion.end);
+      }
     }
   }
 
@@ -346,7 +377,7 @@ export function init() {
 
       const a = document.createElement('a');
       a.href = `/api/download-ringtone/${data.id}`;
-      a.download = 'ringtone.m4r';
+      a.download = 'ringtone.m4a';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -377,7 +408,15 @@ export function init() {
         body: JSON.stringify({ id: currentAudioId, startTime, endTime, fadeOutDuration }),
       });
 
-      const data = (await res.json()) as { id?: string; error?: string; detail?: string };
+      let data: { id?: string; error?: string; detail?: string };
+      try {
+        data = (await res.json()) as { id?: string; error?: string; detail?: string };
+      } catch {
+        previewLoading.classList.add('hidden');
+        generatePreviewBtn.disabled = false;
+        showStatus('Preview generation failed (server error)', true);
+        return;
+      }
 
       if (!res.ok) {
         previewLoading.classList.add('hidden');
@@ -402,8 +441,15 @@ export function init() {
   // ------------------------------------------------------------------
   zoomSlider.addEventListener('input', () => {
     if (!wavesurfer || baseMinPxPerSec === 0) return;
+    const container = document.querySelector('#waveform') as HTMLElement;
+    const scrollable = container.scrollWidth - container.clientWidth;
+    const scrollRatio = scrollable > 0 ? container.scrollLeft / scrollable : 0;
     const pxPerSec = calcZoomPxPerSec(parseInt(zoomSlider.value), baseMinPxPerSec, MAX_ZOOM_PX_PER_SEC);
     wavesurfer.zoom(pxPerSec);
+    requestAnimationFrame(() => {
+      const newScrollable = container.scrollWidth - container.clientWidth;
+      container.scrollLeft = scrollRatio * newScrollable;
+    });
   });
 
   loadUrlBtn.addEventListener('click', () => {
