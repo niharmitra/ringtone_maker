@@ -149,10 +149,12 @@ function processAudio(
   onError: (err: Error) => void,
   outputFormat?: string,
 ) {
-  let cmd = ffmpeg(inputPath).setStartTime(startTime).setDuration(duration);
+  const halfFade = fadeOutDuration > 0 && fadeOutDuration / 2 < duration ? fadeOutDuration / 2 : 0;
+  const totalDuration = duration + halfFade;
+  let cmd = ffmpeg(inputPath).setStartTime(startTime).setDuration(totalDuration);
 
-  if (fadeOutDuration > 0 && fadeOutDuration < duration) {
-    const fadeStart = duration - fadeOutDuration;
+  if (halfFade > 0) {
+    const fadeStart = duration - halfFade;
     cmd = cmd.audioFilters([`afade=t=out:st=${fadeStart}:d=${fadeOutDuration}`]);
   }
 
@@ -199,7 +201,8 @@ function validateProcessRequest(
   if (duration <= 0) {
     return { error: 'endTime must be greater than startTime', status: 400 };
   }
-  if (enforceLimit && duration > 30) {
+  const fadedDuration = duration + (typeof fadeOutDuration === 'number' && fadeOutDuration > 0 ? fadeOutDuration / 2 : 0);
+  if (enforceLimit && fadedDuration > 30) {
     return { error: 'Ringtone duration cannot exceed 30 seconds (iOS limit)', status: 400 };
   }
   return { id, startTime, endTime, duration, fadeOutDuration: typeof fadeOutDuration === 'number' ? fadeOutDuration : 0 };

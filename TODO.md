@@ -8,3 +8,6 @@
 [] We should check for already recently downloaded videos as a cache. e.g. if we are downloading to some /tmp/ringtone_maker we should scan it to leverage it as a cache.
 [] After loading a youtube video link I see "Invalid URI. Load of media resource  failed." printed in the console
 [] I see .wav files in the tmp/ directory. Why are they .wav? I think .m4a would be higher quality? Is .wav required for something?
+[] If the left/right handles are edited while playing, the current playback doesn't respect them 
+[] we should save the thumbnail with the ringtone file to make it look better.
+[] is there a diff between mp4 and m4a?

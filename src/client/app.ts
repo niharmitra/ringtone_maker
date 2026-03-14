@@ -28,6 +28,7 @@ let isPreviewLooping = false;
 let baseMinPxPerSec = 0;
 let pausedAtRegionEnd = false;
 let userSeeked = false;
+let previewSrcActive = false;
 
 function formatTime(seconds: number): string {
   return seconds.toFixed(2) + 's';
@@ -125,6 +126,7 @@ export function init() {
   }
 
   function resetPreview() {
+    previewSrcActive = false;
     previewAudio.pause();
     previewAudio.src = '';
     previewPlayer.classList.add('hidden');
@@ -352,8 +354,8 @@ export function init() {
       return;
     }
 
-    if (fadeOutDuration >= endTime - startTime) {
-      showStatus('Fade-out duration must be shorter than the selected region.', true);
+    if (fadeOutDuration > 0 && fadeOutDuration / 2 >= endTime - startTime) {
+      showStatus('Fade-out duration must be less than twice the selected region length.', true);
       return;
     }
 
@@ -425,7 +427,10 @@ export function init() {
         return;
       }
 
+      previewSrcActive = true;
       previewAudio.src = `/api/preview-audio/${data.id}`;
+      previewPlayIcon.classList.remove('hidden');
+      previewPauseIcon.classList.add('hidden');
       previewLoading.classList.add('hidden');
       previewPlayer.classList.remove('hidden');
       generatePreviewBtn.disabled = false;
@@ -508,7 +513,7 @@ export function init() {
   });
 
   previewAudio.addEventListener('error', () => {
-    if (!previewPlayer.classList.contains('hidden')) {
+    if (previewSrcActive) {
       showStatus('Preview playback failed', true);
     }
   });
