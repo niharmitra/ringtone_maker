@@ -218,7 +218,7 @@ app.post('/api/process', (req, res) => {
   }
 
   const outputId = uuidv4();
-  const outputPath = path.join(TMP_DIR, `${outputId}.m4a`);
+  const outputPath = path.join(TMP_DIR, `${outputId}.m4r`);
 
   try {
     processAudio(
@@ -231,6 +231,7 @@ app.post('/api/process', (req, res) => {
       '256k',
       () => res.json({ id: outputId }),
       (err) => res.status(500).json({ error: 'Processing failed', detail: err.message }),
+      'ipod',
     );
   } catch (err) {
     res.status(500).json({ error: 'Processing failed', detail: String(err) });
@@ -303,7 +304,7 @@ app.get('/api/download-ringtone/:id', (req, res) => {
     return;
   }
 
-  const filePath = path.join(TMP_DIR, `${id}.m4a`);
+  const filePath = path.join(TMP_DIR, `${id}.m4r`);
 
   if (!fs.existsSync(filePath)) {
     res.status(404).json({ error: 'Ringtone not found' });
@@ -311,7 +312,7 @@ app.get('/api/download-ringtone/:id', (req, res) => {
   }
 
   res.setHeader('Content-Type', 'audio/mp4');
-  res.setHeader('Content-Disposition', `attachment; filename="ringtone.m4a"`);
+  res.setHeader('Content-Disposition', `attachment; filename="ringtone.m4r"`);
   fs.createReadStream(filePath).pipe(res);
 });
 

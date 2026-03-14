@@ -377,7 +377,7 @@ export function init() {
 
       const a = document.createElement('a');
       a.href = `/api/download-ringtone/${data.id}`;
-      a.download = 'ringtone.m4a';
+      a.download = 'ringtone.m4r';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
