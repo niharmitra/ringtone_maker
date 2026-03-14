@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ringtone Maker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            gray: {
+              950: '#0a0a0f',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    #waveform wave {
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .region-handle {
+      width: 6px !important;
+      background: rgba(6, 182, 212, 0.8) !important;
+    }
+    #waveform {
+      border-radius: 6px;
+      overflow-y: hidden;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col items-center py-12 px-4 font-sans">
+
+  <div class="w-full max-w-2xl space-y-6">
+
+    <!-- Header -->
+    <div class="text-center">
+      <h1 class="text-3xl font-bold text-cyan-400 tracking-tight">Ringtone Maker</h1>
+      <p class="text-gray-400 mt-1 text-sm">Create iPhone ringtones from YouTube or local audio</p>
+    </div>
+
+    <!-- Source card -->
+    <div class="bg-gray-900 rounded-xl p-6 space-y-4 border border-gray-800">
+
+      <!-- YouTube URL -->
+      <div class="space-y-2">
+        <label class="text-sm font-medium text-gray-300">YouTube URL</label>
+        <div class="flex gap-2">
+          <input
+            id="url-input"
+            type="text"
+            placeholder="https://www.youtube.com/watch?v=..."
+            class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+          />
+          <button
+            id="load-url-btn"
+            class="bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Load
+          </button>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div class="flex items-center gap-3">
+        <div class="flex-1 h-px bg-gray-700"></div>
+        <span class="text-xs text-gray-500 uppercase tracking-widest">or</span>
+        <div class="flex-1 h-px bg-gray-700"></div>
+      </div>
+
+      <!-- File upload -->
+      <div>
+        <label class="text-sm font-medium text-gray-300 block mb-2">Local File</label>
+        <label
+          id="file-label"
+          class="flex items-center justify-center gap-2 bg-gray-800 border border-dashed border-gray-600 hover:border-cyan-500 rounded-lg px-4 py-3 cursor-pointer transition-colors text-sm text-gray-400 hover:text-cyan-400"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span id="file-label-text">Choose audio file…</span>
+          <input id="file-input" type="file" accept="audio/*" class="hidden" />
+        </label>
+      </div>
+    </div>
+
+    <!-- Loading indicator -->
+    <div id="loading" class="hidden flex items-center gap-3 text-sm text-gray-400 justify-center py-2">
+      <svg class="animate-spin w-5 h-5 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <span id="loading-text">Loading…</span>
+    </div>
+
+    <!-- Waveform section (hidden until loaded) -->
+    <div id="waveform-section" class="hidden bg-gray-900 rounded-xl p-6 space-y-4 border border-gray-800">
+
+      <!-- Waveform container -->
+      <div>
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-xs text-gray-500">Drag handles to select up to 30 seconds</span>
+          <span id="region-duration" class="text-xs text-cyan-400 font-mono"></span>
+        </div>
+        <div id="waveform" class="w-full bg-gray-800 rounded-lg" style="height: 96px;"></div>
+      </div>
+
+      <!-- Zoom slider -->
+      <div class="flex items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+        </svg>
+        <span class="text-xs text-gray-500 whitespace-nowrap">Zoom</span>
+        <input
+          id="zoom-slider"
+          type="range"
+          min="0"
+          max="1000"
+          value="0"
+          class="flex-1 accent-cyan-500 cursor-pointer"
+        />
+      </div>
+
+      <!-- Time display -->
+      <div class="flex justify-between text-xs font-mono text-gray-400">
+        <span>Start: <span id="time-start">0.00s</span></span>
+        <span>End: <span id="time-end">0.00s</span></span>
+        <span>Duration: <span id="time-duration">0.00s</span></span>
+      </div>
+
+      <!-- Controls row -->
+      <div class="flex items-center gap-4">
+        <button
+          id="play-btn"
+          class="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm text-gray-200 px-4 py-2 rounded-lg transition-colors"
+        >
+          <svg id="play-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <svg id="pause-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 hidden" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+          </svg>
+          <span id="play-btn-text">Play</span>
+        </button>
+
+        <button
+          id="replay-btn"
+          title="Replay region"
+          class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 p-2 rounded-lg transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+          </svg>
+        </button>
+
+        <button
+          id="loop-btn"
+          title="Loop region"
+          class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 p-2 rounded-lg transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+
+        <div class="flex items-center gap-2 flex-1">
+          <label class="text-xs text-gray-400 whitespace-nowrap">Fade out</label>
+          <input
+            id="fade-input"
+            type="number"
+            min="0"
+            max="30"
+            step="0.5"
+            value="2"
+            class="w-20 bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-sm text-gray-100 text-center focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          />
+          <span class="text-xs text-gray-500">sec</span>
+        </div>
+
+        <button
+          id="export-btn"
+          class="bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Export .m4r
+        </button>
+      </div>
+
+      <!-- Preview section -->
+      <div id="preview-section" class="hidden border-t border-gray-800 pt-4 space-y-3">
+        <div class="flex items-center gap-3">
+          <button
+            id="generate-preview-btn"
+            class="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-sm text-gray-200 px-4 py-2 rounded-lg transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.07A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+            </svg>
+            Generate Full Preview
+          </button>
+          <div id="preview-loading" class="hidden flex items-center gap-2 text-xs text-gray-400">
+            <svg class="animate-spin w-4 h-4 text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Processing…
+          </div>
+        </div>
+
+        <div id="preview-player" class="hidden flex items-center gap-3">
+          <button
+            id="preview-play-btn"
+            class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 p-2 rounded-lg transition-colors"
+            title="Play preview"
+          >
+            <svg id="preview-play-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            <svg id="preview-pause-icon" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 hidden" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+            </svg>
+          </button>
+          <button
+            id="preview-loop-btn"
+            title="Loop preview"
+            class="flex items-center justify-center bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-400 p-2 rounded-lg transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
+          <span class="text-xs text-gray-400">Preview ready (with fade)</span>
+        </div>
+
+        <audio id="preview-audio" class="hidden"></audio>
+      </div>
+    </div>
+
+    <!-- Status messages -->
+    <div id="status" class="hidden text-sm rounded-lg px-4 py-3 text-center"></div>
+
+  </div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
